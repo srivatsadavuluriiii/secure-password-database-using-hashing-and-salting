@@ -1,72 +1,106 @@
 # Secure Password Database (Hashing and Salting)
 
-Project that demonstrates securely storing user passwords using modern hashing and salting techniques. The repository contains a small Python application which manages password storage and verification while avoiding plaintext storage of credentials.
+This repository demonstrates secure password storage using strong hashing and salting algorithms. It contains a small Python application that provides user registration and authentication flows, backed by MongoDB for storage. The project is intended for learning and small prototypes — review the Security considerations below before using any part of this code in production.
 
-## Features
+## Quick start — what to run
 
-- Demonstrates hashing and salting of passwords for secure storage
-- Minimal CLI/API structure suitable for extension or learning
-- Clear examples of responsible secret handling and storage patterns
+1. Clone the repository and change into the project directory:
 
-## Requirements
-
-- Python 3.10+ (3.11 recommended)
-- Virtual environment (recommended)
-- Dependencies listed in `requirements.txt`
-
-## Installation
-
-1. Clone the repository (if you haven't already):
-
-   git clone https://github.com/srivatsadavuluriiii/secure-password-database-using-hashing-and-salting.git
-   cd secure-password-database-using-hashing-and-salting
+    git clone https://github.com/srivatsadavuluriiii/secure-password-database-using-hashing-and-salting.git
+    cd secure-password-database-using-hashing-and-salting
 
 2. Create and activate a virtual environment:
 
-   python -m venv .venv
-   source .venv/bin/activate
+    python -m venv .venv
+    source .venv/bin/activate
 
 3. Install dependencies:
 
-   pip install -r requirements.txt
+    pip install -r requirements.txt
 
-## Project structure
+4. Ensure MongoDB is running and accessible (default URI: `mongodb://localhost:27017/`). To override, set `MONGO_URI` in your environment or a `.env` file.
 
-- `app.py` - Application entry point / example usage
-- `auth_manager.py` - Password hashing and verification logic
-- `database.py` - Simple storage abstraction (file or in-memory)
-- `config.py` - Configuration constants and settings
-- `requirements.txt` - Python dependencies
+5. Run the application:
 
-## Usage
+    python app.py
 
-Run the main application to see example flows or to manually exercise functions:
+The interactive menu lets you register users, log in, and list registered users.
 
-   python app.py
+## File-by-file overview (detailed)
 
-Refer to `auth_manager.py` for functions to create hashed passwords and verify them. If you plan to import the modules, the expected behavior is:
+- `app.py`
+   - Entry point for the interactive demo application.
+   - Implements `AuthApp` which wires together `DatabaseManager` and `AuthManager`.
+   - Menu options:
+      - Register User: prompts for email and password (hidden input), chooses hashing algorithm (`scrypt` or `pbkdf2`), and stores the user record.
+      - Login User: prompts for email and password, looks up the user in the database, and calls the correct verification routine based on the stored `algorithm` field.
+      - List Users: prints stored users (email and algorithm) — included for demonstration only and not safe for production use.
 
-- `hash_password(plain_password)` -> returns a salted, securely hashed password string
-- `verify_password(plain_password, stored_hash)` -> returns True if match, False otherwise
+- `auth_manager.py`
+   - Implements `AuthManager` and the hashing/verification functionality using `passlib` wrappers.
+   - Public methods and behavior:
+      - `hash_with_scrypt(password)`: produces a scrypt-based hash using parameters from `config.Config`.
+      - `hash_with_pbkdf2(password)`: produces a PBKDF2-HMAC-SHA256 hash using configured rounds.
+      - `verify_scrypt(password, hashed)`: verifies a plaintext password against a scrypt hash.
+      - `verify_pbkdf2(password, hashed)`: verifies a plaintext password against a PBKDF2 hash.
+      - `create_user_data(email, password, algorithm)`: convenience method that hashes the provided password with the chosen algorithm and returns a dict with `email`, `password` (the hash string), `algorithm`, and `created_at` timestamp.
+   - Notes:
+      - `passlib` produces complete encoded hash strings which include salt and parameters; storing the full encoded string is recommended (and how this project stores passwords).
+      - The code uses `passlib.hash.scrypt` and `passlib.hash.pbkdf2_sha256`.
 
-## Configuration
+- `database.py`
+   - Implements `DatabaseManager`, a thin wrapper around `pymongo.MongoClient`.
+   - Behavior:
+      - Connects to MongoDB using `Config.MONGO_URI` and selects the configured database and collection.
+      - Ensures a unique index on the `email` field.
+      - `insert_user(user_data)`: inserts a user document and returns True on success, False on failure or duplicate email.
+      - `find_user_by_email(email)`: fetches a single user document by email.
+      - `close_connection()`: closes the MongoDB connection.
+   - Notes:
+      - For learning, the project stores the entire passlib hash string in the `password` field and records the algorithm used in `algorithm`.
+      - Replace this storage abstraction with a real database access pattern if using in production (e.g., parameterized queries, ORM, connection pooling, secrets management).
 
-Keep secrets and environment-specific settings out of source control. Use environment variables or a local `config` file that is excluded by `.gitignore`.
+- `config.py`
+   - Loads environment variables through `python-dotenv` and exposes a `Config` class with constants:
+      - `MONGO_URI`: default `mongodb://localhost:27017/`.
+      - `DATABASE_NAME`, `COLLECTION_NAME`: default database/collection for user documents.
+      - `SCRYPT_N`, `SCRYPT_R`, `SCRYPT_P`: scrypt cost parameters used by `passlib` wrapper.
+      - `PBKDF2_ROUNDS`: iteration count for PBKDF2.
+   - To override configuration, set environment variables (for `MONGO_URI`) or modify the file locally (not recommended for secrets).
 
-## Security considerations
+## What each file does — quick call reference
 
-- Always use a vetted password hashing function (bcrypt, Argon2, PBKDF2 with adequate iterations). This project is intended for learning; for production, use a maintained library such as `bcrypt` or `argon2-cffi`.
-- Do not log plaintext passwords. Avoid storing secrets in source control.
-- Rotate salts and hashing parameters as best practice when threat models change.
+- `auth_manager.hash_with_scrypt(password)` -> returns encoded scrypt hash string
+- `auth_manager.hash_with_pbkdf2(password)` -> returns encoded PBKDF2-SHA256 hash string
+- `auth_manager.verify_scrypt(password, stored_hash)` -> True/False
+- `auth_manager.verify_pbkdf2(password, stored_hash)` -> True/False
+- `database.DatabaseManager.insert_user(user_data)` -> True on success, False on error/duplicate
+- `database.DatabaseManager.find_user_by_email(email)` -> dict or None
 
-## Testing
+## Security considerations (expanded)
 
-Add unit tests for the hashing and verification logic. Example tests should verify:
+- Use production-ready libraries and parameters:
+   - For production choose Argon2 or bcrypt/modern scrypt parameters appropriate for your hardware.
+   - The `passlib` wrappers used here are convenient for examples; verify algorithm parameters before deploying.
 
-- Hashing produces different hashes for the same password when salts differ
-- Verification returns True for correct password and False otherwise
+- Secrets and environment handling:
+   - Do not commit `MONGO_URI` with credentials to source control. Use environment variables or a secrets manager.
+   - Do not add a `.env` file to source control; add it to `.gitignore`.
 
-## Contribution
+- Logging and data exposure:
+   - Remove demonstration helpers (e.g., `list_users`) before production. Avoid printing user lists or hashes.
 
-Contributions are welcome. Open an issue to discuss major changes. Keep changes focused and include tests for new behavior.
+## Testing recommendations
+
+- Add unit tests (pytest recommended) for `AuthManager` functions: ensure expected behavior for hashing and verification across algorithms and incorrect inputs.
+- Example test cases:
+   - Same password hashed twice yields different encoded results (due to different salts).
+   - Correct password verifies True; wrong password verifies False.
+   - `create_user_data` returns a dict with expected keys and non-empty `password`.
+
+## Contribution and maintenance notes
+
+- File issues for design changes. Keep cryptographic parameter changes in a single place (`config.py`) and document migration steps when changing parameters that affect verify behavior.
+- Add a `LICENSE` file if you intend to open-source the project.
+
 
