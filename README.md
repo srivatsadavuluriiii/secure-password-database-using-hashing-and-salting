@@ -70,6 +70,3 @@ Add unit tests for the hashing and verification logic. Example tests should veri
 
 Contributions are welcome. Open an issue to discuss major changes. Keep changes focused and include tests for new behavior.
 
-## License
-
-This repository does not include a license file. Add a LICENSE if you intend to make the project open source.
