@@ -101,6 +101,5 @@ The interactive menu lets you register users, log in, and list registered users.
 ## Contribution and maintenance notes
 
 - File issues for design changes. Keep cryptographic parameter changes in a single place (`config.py`) and document migration steps when changing parameters that affect verify behavior.
-- Add a `LICENSE` file if you intend to open-source the project.
 
 
